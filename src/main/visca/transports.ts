@@ -109,7 +109,9 @@ export abstract class ViscaTransport extends EventEmitter<TransportEvents> {
 	}
 }
 
-export function createTransport(config: TransportConfig & { kind: ViscaTransportKind }): ViscaTransport {
+export function createTransport(
+	config: TransportConfig & { kind: ViscaTransportKind; address: number },
+): ViscaTransport {
 	switch (config.kind) {
 		case 'sony-udp':
 			return new SonyUdpTransport(config.host, config.port || DEFAULT_PORTS['sony-udp'])
@@ -118,7 +120,7 @@ export function createTransport(config: TransportConfig & { kind: ViscaTransport
 		case 'tcp':
 			return new TcpTransport(config.host, config.port || DEFAULT_PORTS.tcp)
 		case 'serial':
-			return new SerialTransport(config.serialPath, config.baudRate || 9600)
+			return new SerialTransport(config.serialPath, config.baudRate || 9600, config.address)
 	}
 }
 
@@ -403,67 +405,249 @@ class TcpTransport extends ViscaTransport {
 
 const SERIAL_RETRY_DELAY = 2000
 
-class SerialTransport extends ViscaTransport {
+/**
+ * The serial binding that opening a port goes through. Left undefined so SerialPort falls back to
+ * its own auto-detected native binding; The test suite overrides this with an in-memory mock.
+ */
+let serialBinding: unknown
+
+export function setSerialBinding(binding: unknown): void {
+	serialBinding = binding
+}
+
+/**
+ * The interface returned to a camera when it joins a shared port: send to write that camera's
+ * bytes onto the line, close to leave the chain (closing the real port once the last camera leaves).
+ */
+interface SerialEndpoint {
+	send(data: Buffer): void
+	close(): Promise<void>
+}
+
+/**
+ * The interface a camera supplies when it joins a shared port: its address, so replies can be
+ * routed to it, and the callbacks the shared port invokes to deliver that camera's replies and
+ * connection state.
+ */
+interface SerialHandlers {
+	address: number
+	onMessage: (reply: ViscaReply) => void
+	onStatus: (connected: boolean, error?: string) => void
+}
+
+/**
+ * Up to 7 cameras share one RS-232/RS-422 line, told apart by address. The OS device opens only
+ * once, so every camera on a path shares one real SerialPort, keyed by path and baud rate. Writes
+ * multiplex onto it; inbound bytes are framed and parsed once, and each reply is routed to the
+ * camera whose address matches (replies for an address no camera holds are dropped). Open, retry
+ * and close are refcounted: the port opens with the first camera and closes with the last.
+ */
+class SharedSerialPort {
+	static readonly #instances = new Map<string, SharedSerialPort>()
+	/** The still-running teardown of a just-closed instance, so its replacement waits for the handle */
+	static readonly #closings = new Map<string, Promise<void>>()
+
+	static acquire(path: string, baudRate: number, handlers: SerialHandlers): SerialEndpoint {
+		const key = `${path}|${baudRate}`
+		let shared = SharedSerialPort.#instances.get(key)
+		if (!shared) {
+			shared = new SharedSerialPort(key, path, baudRate)
+			// If the previous instance for this key is still closing, open only once the OS releases
+			// the handle, so we don't race a 'busy' error against a device the kernel still holds
+			shared.#closing = SharedSerialPort.#closings.get(key)
+			SharedSerialPort.#instances.set(key, shared)
+		}
+		return shared.#add(handlers)
+	}
+
 	#port: SerialPort | undefined
-	#closed = false
+	#opening = false
+	/** The port whose open() is outstanding, so #close can tell a real in-flight open apart */
+	#pendingOpen: SerialPort | undefined
 	#retry: ReturnType<typeof setTimeout> | undefined
+	/** Teardown of the previous instance, so a re-acquire waits for the OS handle to be released */
+	#closing: Promise<void> | undefined
+	/** Resolves the teardown once a close-during-open has shut the orphaned port down */
+	#resolveOpenClose: (() => void) | undefined
 	readonly #splitter = new ViscaStreamSplitter()
+	/** Routes keyed by camera address; several cameras could share one in a misconfiguration */
+	readonly #routes = new Map<number, Set<SerialHandlers>>()
+
+	private constructor(
+		private readonly key: string,
+		private readonly path: string,
+		private readonly baudRate: number,
+	) {}
+
+	#eachHandler(fn: (handlers: SerialHandlers) => void): void {
+		for (const set of this.#routes.values()) for (const handlers of set) fn(handlers)
+	}
+
+	#openPort(): void {
+		// #opening guards against a second camera racing open a duplicate port while the first is pending
+		if (this.#port || this.#opening || this.#routes.size === 0) return
+		if (!this.path) {
+			this.#eachHandler((h) => h.onStatus(false, 'No serial port selected'))
+			return
+		}
+		this.#opening = true
+
+		// A prior instance for this key may still be releasing the OS handle; wait it out first
+		if (this.#closing) {
+			const closing = this.#closing
+			this.#closing = undefined
+			closing.then(() => {
+				this.#opening = false
+				// Every camera left during the wait: settle the #close awaiting us so its #closings drains
+				if (this.#routes.size === 0) {
+					const done = this.#resolveOpenClose
+					this.#resolveOpenClose = undefined
+					done?.()
+					return
+				}
+				this.#openPort()
+			})
+			return
+		}
+
+		const options = { path: this.path, baudRate: this.baudRate, autoOpen: false }
+		// The binding option exists on the underlying stream but is hidden by SerialPort's type, so cast
+		const port = new SerialPort(
+			(serialBinding ? { ...options, binding: serialBinding } : options) as ConstructorParameters<typeof SerialPort>[0],
+		)
+		// Mark the real open outstanding, so #close can tell it from the #closing-wait branch above
+		this.#pendingOpen = port
+		port.on('data', (data: Buffer) => {
+			for (const message of this.#splitter.push(data)) {
+				const reply = parseReply(message)
+				const address = 'address' in reply ? reply.address : undefined
+				if (address === undefined) {
+					// Unaddressable: can't attribute it on a multi-camera chain, so drop it; but hand it to
+					// a lone camera, which saw every reply back when it owned its own port
+					if (this.#routes.size === 1) for (const set of this.#routes.values()) for (const h of set) h.onMessage(reply)
+					continue
+				}
+				for (const handlers of this.#routes.get(address) ?? []) handlers.onMessage(reply)
+			}
+		})
+		port.on('close', () => {
+			this.#port = undefined
+			this.#eachHandler((h) => h.onStatus(false))
+			this.#scheduleRetry()
+		})
+		port.open((e) => {
+			this.#opening = false
+			this.#pendingOpen = undefined
+			// A close that landed mid-open is waiting on this resolver; the open is over either way
+			if (this.#resolveOpenClose) {
+				const done = this.#resolveOpenClose
+				this.#resolveOpenClose = undefined
+				if (!e && port.isOpen) port.close(() => done())
+				else done()
+				return
+			}
+			if (e) {
+				this.#eachHandler((h) => h.onStatus(false, e.message))
+				this.#scheduleRetry()
+				return
+			}
+			// Chain emptied without a close awaiting us: close the orphan rather than re-lock the path
+			if (this.#routes.size === 0) {
+				port.close(() => {})
+				return
+			}
+			this.#port = port
+			this.#eachHandler((h) => h.onStatus(true))
+		})
+	}
+
+	#scheduleRetry(): void {
+		if (this.#routes.size === 0) return
+		clearTimeout(this.#retry)
+		this.#retry = setTimeout(() => this.#openPort(), SERIAL_RETRY_DELAY)
+	}
+
+	#add(handlers: SerialHandlers): SerialEndpoint {
+		let set = this.#routes.get(handlers.address)
+		if (!set) this.#routes.set(handlers.address, (set = new Set()))
+		set.add(handlers)
+		// The first camera opens the port; later ones learn its state from the next status change
+		this.#openPort()
+		// A late joiner is told the port is already up on the next tick - but only if it is still
+		// here and still open by then, so a close in that gap doesn't fire a stale connected=true
+		if (this.#port?.isOpen)
+			queueMicrotask(() => {
+				if (set.has(handlers) && this.#port?.isOpen) handlers.onStatus(true)
+			})
+
+		return {
+			send: (data) => this.#port?.write(data),
+			close: async () => {
+				set.delete(handlers)
+				if (set.size === 0) this.#routes.delete(handlers.address)
+				if (this.#routes.size === 0) await this.#close()
+			},
+		}
+	}
+
+	async #close(): Promise<void> {
+		clearTimeout(this.#retry)
+		// #pendingOpen, not #opening: the #closing-wait branch sets #opening but holds no handle
+		const openInFlight = this.#pendingOpen !== undefined
+		this.#opening = false
+		if (SharedSerialPort.#instances.get(this.key) === this) SharedSerialPort.#instances.delete(this.key)
+
+		// Build a teardown a re-acquire of this key waits on: close an open port now; let an in-flight
+		// open's callback close the orphan via a resolver; otherwise this instance holds no handle
+		const port = this.#port
+		this.#port = undefined
+		let teardown: Promise<void>
+		if (port?.isOpen) {
+			teardown = new Promise<void>((resolve) => port.close(() => resolve()))
+		} else if (openInFlight) {
+			teardown = new Promise<void>((resolve) => (this.#resolveOpenClose = resolve))
+		} else {
+			teardown = Promise.resolve()
+		}
+
+		SharedSerialPort.#closings.set(this.key, teardown)
+		try {
+			await teardown
+		} finally {
+			if (SharedSerialPort.#closings.get(this.key) === teardown) SharedSerialPort.#closings.delete(this.key)
+		}
+	}
+}
+
+class SerialTransport extends ViscaTransport {
+	#endpoint: SerialEndpoint | undefined
 
 	constructor(
 		private readonly path: string,
 		private readonly baudRate: number,
+		private readonly address: number,
 	) {
 		super()
 	}
 
 	open(): void {
-		this.#closed = false
-		this.#openPort()
-	}
-
-	#openPort(): void {
-		if (this.#port || this.#closed) return
-		if (!this.path) {
-			this.emit('status', false, 'No serial port selected')
-			return
-		}
-
-		const port = new SerialPort({ path: this.path, baudRate: this.baudRate, autoOpen: false })
-		port.on('data', (data: Buffer) => {
-			for (const message of this.#splitter.push(data)) this.handleMessage(message)
+		if (this.#endpoint) return
+		// The shared layer parses each reply once, so forward it rather than parse again
+		this.#endpoint = SharedSerialPort.acquire(this.path, this.baudRate, {
+			address: this.address,
+			onMessage: (reply) => this.emit('reply', reply),
+			onStatus: (connected, error) => this.emit('status', connected, error),
 		})
-		port.on('close', () => {
-			this.#port = undefined
-			this.emit('status', false)
-			this.#scheduleRetry()
-		})
-		port.open((e) => {
-			if (e) {
-				this.emit('status', false, e.message)
-				this.#scheduleRetry()
-				return
-			}
-			this.#port = port
-			this.emit('status', true)
-		})
-	}
-
-	#scheduleRetry(): void {
-		if (this.#closed) return
-		clearTimeout(this.#retry)
-		this.#retry = setTimeout(() => this.#openPort(), SERIAL_RETRY_DELAY)
 	}
 
 	send(message: Buffer, _kind: MessageKind): void {
-		this.#port?.write(message)
+		this.#endpoint?.send(message)
 	}
 
 	async close(): Promise<void> {
-		this.#closed = true
-		clearTimeout(this.#retry)
-		const port = this.#port
-		this.#port = undefined
-		if (!port?.isOpen) return
-		await new Promise<void>((resolve) => port.close(() => resolve()))
+		const endpoint = this.#endpoint
+		this.#endpoint = undefined
+		if (!endpoint) return
+		await endpoint.close()
 	}
 }
