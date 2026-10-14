@@ -61,7 +61,7 @@ reassigned, or their health changes.
 | `cameras[].status`      | `responding`, `not-responding`, `waiting` (no reply yet), `not-connected` or `error`                                      |
 | `cameras[].error`       | With `status: "error"`, what went wrong                                                                                   |
 | `cameras[].controllers` | Connected controllers currently driving this camera                                                                       |
-| `controllers[].kind`    | `gamepad` or `dji`                                                                                                        |
+| `controllers[].kind`    | `gamepad`, `dji` or `spacemouse`                                                                                          |
 | `controllers[].live`    | Connected and reporting; `false` while it has gone quiet (and its camera is stopped)                                      |
 | `controllers[].camera`  | The camera it drives, or `null`                                                                                           |
 

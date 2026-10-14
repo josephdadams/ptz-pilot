@@ -24,7 +24,7 @@
 
 ## ✨ Highlights
 
-- 🎮 **Any controller** — Xbox, PlayStation, Switch Pro, 8BitDo and most other gamepads, over USB or Bluetooth. Even a spare **DJI drone remote**.
+- 🎮 **Any controller** — Xbox, PlayStation, Switch Pro, 8BitDo and most other gamepads, over USB or Bluetooth. Even a spare **DJI drone remote** or a **SpaceMouse**.
 - 🎚️ **Truly proportional** — a gentle nudge creeps, full stick flies. Deadzone, response curve and top speed are tunable per axis.
 - 👥 **Several operators at once** — every controller drives its own camera, with its own stick and button assignments.
 - 🔀 **Switch cameras from the controller** — bumpers and D-pad step through cameras; face buttons recall presets.
@@ -42,11 +42,13 @@
 | **Xbox controllers**        | USB or Bluetooth, direct HID      |   ✅   |   ✅    |
 | **DJI RC-N1** (model RC231) | USB-C port on the bottom          |   ✅   |    —    |
 | **Magicsee R1** ring        | Bluetooth, in game mode (@ + B)   |   ✅   |   ✅    |
+| **3Dconnexion SpaceMouse**  | USB, or its wireless receiver     |   ✅   |   ✅    |
 
 - Gamepads show up once you press one of their buttons — a privacy rule of the Gamepad API.
 - Xbox controllers are read directly over HID, independent of the app window. When HID has a controller, the Gamepad API's view of it is ignored, so it never drives a camera twice.
 - The DJI remote reports its sticks and gimbal wheel on its bottom port, but not its buttons.
 - The Magicsee R1 connects as a keyboard, so macOS asks for **Input Monitoring** the first time; allow it, then reopen PTZ Pilot. Its stick is only on or off, so movement eases in: tap to nudge, hold to build to full speed. While PTZ Pilot has it, its letters don't type into other apps.
+- A SpaceMouse (Compact, Wireless, Pro, Pro Wireless, SpaceNavigator, SpaceExplorer) is read directly over HID. Out of the box, tilting the cap pans and tilts, lifting or pressing it zooms, and twisting it focuses; sliding and twisting layouts are a click away. Its side buttons (Menu and Fit on a Pro) switch cameras, and a Pro's 1–4 recall presets. If 3Dconnexion's own driver (3DxWare) is running, it may still pass the SpaceMouse on to other apps; quit it if something else moves too.
 
 Two controllers on the same camera share it: for each movement, whichever pushes harder wins.
 

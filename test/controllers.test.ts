@@ -10,6 +10,7 @@ import {
 	releaseIcade,
 	type IcadeState,
 } from '../src/main/controllers/icade.js'
+import { createSpaceMouseState, parseSpaceMouseReport, spaceMouseButton } from '../src/main/controllers/spacemouse.js'
 
 const pad = (partial: Partial<RawGamepad> = {}): RawGamepad => ({
 	id: 'Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e Product: 0b13)',
@@ -167,4 +168,43 @@ test('icade: swinging the stick across lets go of where it was, release letter o
 	assert.deepEqual(icadeStick(state), { x: 1, y: 0 })
 	feed(state, keys('c'))
 	assert.deepEqual(icadeStick(state), { x: 0, y: 0 }, 'not left stuck going left')
+})
+
+/** A SpaceMouse report: its id, then signed 16-bit readings */
+const smReport = (id: number, ...values: number[]) => {
+	const data = Buffer.alloc(1 + values.length * 2)
+	data[0] = id
+	values.forEach((v, i) => data.writeInt16LE(v, 1 + i * 2))
+	return data
+}
+
+test('spacemouse: older models send slides and tilts apart, turned so up and right read positive', () => {
+	const state = createSpaceMouseState()
+	// Slid right, pushed away from you, pressed down
+	assert.ok(parseSpaceMouseReport(smReport(1, 225, -450, 450), state))
+	assert.deepEqual([state.axes.x, state.axes.y, state.axes.z], [0.5, 1, -1])
+	assert.equal(state.axes.pitch, 0, 'tilts untouched by a slide report')
+
+	// Tilted back, tilted left, twisted clockwise
+	assert.ok(parseSpaceMouseReport(smReport(2, 450, 450, 225), state))
+	assert.deepEqual([state.axes.pitch, state.axes.roll, state.axes.yaw], [-1, -1, 0.5])
+	assert.equal(state.axes.x, 0.5, 'slides kept from before')
+})
+
+test('spacemouse: newer models send all six at once, clamped to full travel', () => {
+	const state = createSpaceMouseState()
+	assert.ok(parseSpaceMouseReport(smReport(1, 0, 0, -900, -450, 0, 0), state))
+	assert.equal(state.axes.z, 1, 'lifted past full travel reads 1')
+	assert.equal(state.axes.pitch, 1, 'tilted forward')
+})
+
+test('spacemouse: buttons by bit; other reports ignored', () => {
+	const state = createSpaceMouseState()
+	assert.ok(parseSpaceMouseReport(Buffer.from([3, 0x02, 0x10, 0x00, 0x04]), state))
+	assert.equal(spaceMouseButton(state, 'b0'), false)
+	assert.equal(spaceMouseButton(state, 'b1'), true)
+	assert.equal(spaceMouseButton(state, 'b12'), true)
+	assert.equal(spaceMouseButton(state, 'b26'), true)
+	assert.equal(parseSpaceMouseReport(Buffer.from([0x17, 0x50]), state), false, 'battery level')
+	assert.equal(parseSpaceMouseReport(Buffer.from([1, 0]), state), false, 'too short')
 })

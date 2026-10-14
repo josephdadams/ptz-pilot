@@ -155,13 +155,13 @@ test('buttons held to zoom and focus ease from the slowest speed up to full', ()
 test('a one-stick controller zooms on its bumpers; a full gamepad switches cameras with them', () => {
 	const layout = LAYOUTS.gamepad.leftTriggers
 	const buttons = ['south', 'east', 'west', 'north', 'lb', 'rb']
-	const ring = defaultButtons(['leftX', 'leftY'], buttons, layout)
+	const ring = defaultButtons('gamepad', ['leftX', 'leftY'], buttons, layout)
 	assert.deepEqual(ring.lb, { type: 'hold', channel: 'zoom', direction: -1 })
 	assert.deepEqual(ring.rb, { type: 'hold', channel: 'zoom', direction: 1 })
 	assert.deepEqual(ring.south, { type: 'presetRecall', preset: 0 })
 	assert.equal(ring.start, undefined, 'only buttons it has')
 
-	const full = defaultButtons(GAMEPAD_AXES, buttons, layout)
+	const full = defaultButtons('gamepad', GAMEPAD_AXES, buttons, layout)
 	assert.deepEqual(full.rb, { type: 'nextCamera' })
 })
 
@@ -172,4 +172,19 @@ test('a controller is only offered layouts it has the sticks for', () => {
 	assert.equal(defaultLayout('gamepad', GAMEPAD_AXES), LAYOUTS.gamepad.leftTriggers)
 	assert.equal(defaultLayout('gamepad', ['leftX', 'leftY']), LAYOUTS.gamepad.oneStick)
 	assert.equal(layoutsFor('dji', ['leftX', 'leftY', 'rightX', 'rightY', 'wheel']).length, 4)
+})
+
+test('a SpaceMouse tilts to pan and tilt, and its side buttons switch cameras', () => {
+	const axes = ['x', 'y', 'z', 'pitch', 'roll', 'yaw']
+	assert.equal(layoutsFor('spacemouse', axes).length, 3)
+	const layout = defaultLayout('spacemouse', axes)
+	assert.equal(layout, LAYOUTS.spacemouse.tilt)
+	const buttons = defaultButtons('spacemouse', axes, ['b0', 'b1'], layout)
+	assert.deepEqual(buttons, { b0: { type: 'previousCamera' }, b1: { type: 'nextCamera' } })
+
+	// Gentler than a gamepad, and staying so when an axis is given another job
+	const m = layoutMapping(axes, layout.actions, undefined, 'spacemouse')
+	assert.equal(m.roll.deadzone, 0.15)
+	assert.equal(m.roll.curve, 3)
+	assert.equal(assignAction(m, 'x', 'pan', 'spacemouse').x.curve, 3)
 })

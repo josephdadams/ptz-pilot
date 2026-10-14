@@ -11,6 +11,7 @@ import {
 	HOLD_RAMP_MS,
 	axesToMotion,
 	buttonsToMotion,
+	defaultAxis,
 	defaultButtons,
 	defaultLayout,
 	layoutMapping,
@@ -198,7 +199,7 @@ export class Engine extends EventEmitter<EngineEvents> {
 			this.updateSettings((s) => {
 				const c = s.controllers.find((x) => x.id === info.id)!
 				c.name = info.name
-				for (const axis of info.axes) c.axes[axis.id] ??= layoutMapping([axis.id], {})[axis.id]
+				for (const axis of info.axes) c.axes[axis.id] ??= defaultAxis('none', info.kind)
 			})
 		}
 		this.#emitState()
@@ -221,8 +222,11 @@ export class Engine extends EventEmitter<EngineEvents> {
 			name: info.name,
 			// A new controller starts on the camera the window is showing
 			cameraId: settings.activeCameraId,
-			axes: legacy ? { ...layoutMapping(axisIds, {}), ...legacy } : layoutMapping(axisIds, layout.actions),
+			axes: legacy
+				? { ...layoutMapping(axisIds, {}), ...legacy }
+				: layoutMapping(axisIds, layout.actions, undefined, info.kind),
 			buttons: defaultButtons(
+				info.kind,
 				axisIds,
 				info.buttons.map((b) => b.id),
 				layout,

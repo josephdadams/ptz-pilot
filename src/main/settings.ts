@@ -167,15 +167,23 @@ function sanitiseButtonAction(a: Partial<ButtonAction> | undefined, cameraIds: S
 	}
 }
 
+/** What to call a remembered controller that somehow lost its name */
+const CONTROLLER_NAMES: Record<ControllerKind, string> = {
+	dji: 'DJI controller',
+	gamepad: 'Gamepad',
+	spacemouse: 'SpaceMouse',
+}
+
 function sanitiseController(c: Partial<ControllerSettings>, cameraIds: Set<string>): ControllerSettings | undefined {
-	if (typeof c.id !== 'string' || (c.kind !== 'dji' && c.kind !== 'gamepad')) return undefined
+	const kind = c.kind
+	if (typeof c.id !== 'string' || !kind || !Object.hasOwn(CONTROLLER_NAMES, kind)) return undefined
 	const buttons: ButtonMapping = {}
 	for (const [button, action] of Object.entries(c.buttons ?? {}))
 		buttons[button] = sanitiseButtonAction(action, cameraIds)
 	return {
 		id: c.id,
-		kind: c.kind,
-		name: str(c.name, c.kind === 'dji' ? 'DJI controller' : 'Gamepad'),
+		kind,
+		name: str(c.name, CONTROLLER_NAMES[kind]),
 		cameraId: typeof c.cameraId === 'string' && cameraIds.has(c.cameraId) ? c.cameraId : undefined,
 		axes: sanitiseMapping(c.axes),
 		buttons,

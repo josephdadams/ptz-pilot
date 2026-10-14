@@ -88,6 +88,22 @@ async function askForInputMonitoring(name: string): Promise<void> {
 	if (response === 0) void shell.openExternal(INPUT_MONITORING_SETTINGS)
 }
 
+let toldControllerBusy = false
+
+/** A controller PTZ Pilot needs to itself, such as a SpaceMouse, is held by another app */
+async function tellControllerBusy(name: string): Promise<void> {
+	if (toldControllerBusy) return
+	toldControllerBusy = true
+	const options: Electron.MessageBoxOptions = {
+		type: 'info',
+		message: `Another app is using the ${name}`,
+		detail:
+			'PTZ Pilot takes the controller over, so it only moves your cameras and not the pointer or other apps. ' +
+			"Quit whatever has it, such as 3Dconnexion's own driver (3DxWare), and PTZ Pilot will pick it up within a few seconds.",
+	}
+	await (window ? dialog.showMessageBox(window, options) : dialog.showMessageBox(options))
+}
+
 /** Settings from before the app was renamed, carried over once */
 function migrateOldSettings(): void {
 	const target = path.join(app.getPath('userData'), 'settings.json')
@@ -230,7 +246,7 @@ function registerIpc(e: Engine, gamepads: GamepadSource, apiServer: ApiServer): 
 	)
 	ipcMain.handle('controller:assignAxis', (_event, id: string, axis: string, action: MotionChannel | 'none') =>
 		editController(e, id, (c) => {
-			c.axes = assignAction(c.axes, axis, action)
+			c.axes = assignAction(c.axes, axis, action, c.kind)
 		}),
 	)
 	ipcMain.handle(
@@ -244,7 +260,7 @@ function registerIpc(e: Engine, gamepads: GamepadSource, apiServer: ApiServer): 
 	ipcMain.handle('controller:layout', (_event, id: string, layoutId: string) =>
 		editController(e, id, (c) => {
 			const layout = LAYOUTS[c.kind][layoutId]
-			if (layout) c.axes = layoutMapping(Object.keys(c.axes), layout.actions, c.axes)
+			if (layout) c.axes = layoutMapping(Object.keys(c.axes), layout.actions, c.axes, c.kind)
 		}),
 	)
 	ipcMain.handle('controller:button', (_event, id: string, button: string, action: ButtonAction) =>
@@ -291,6 +307,7 @@ app.whenReady().then(() => {
 
 	const hid = new HidSource()
 	hid.setBlockedHandler((name) => void askForInputMonitoring(name))
+	hid.setBusyHandler((name) => void tellControllerBusy(name))
 	const gamepads = new GamepadSource()
 	// Pads handled over HID also appear to the Gamepad API; drive them from HID only
 	gamepads.setClaimCheck((vendorId, productId) => hid.claims(vendorId, productId))

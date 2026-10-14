@@ -51,6 +51,24 @@ export const DEFAULT_AXIS: Omit<AxisMapping, 'action'> = {
 /** Zoom and focus feel better with a gentler curve than pan and tilt */
 export const DEFAULT_CURVE: Record<MotionChannel | 'none', number> = { pan: 2, tilt: 2, zoom: 1.5, focus: 1.5, none: 2 }
 
+/**
+ * Where a SpaceMouse starts. Its cap reads off centre under a resting finger and its axes bleed
+ * into each other, so it ignores more around centre, and it eases in more steeply, so the small
+ * pushes it is so sensitive to stay slow.
+ */
+const SPACEMOUSE_DEADZONE = 0.15
+const SPACEMOUSE_CURVE_BOOST = 1
+
+/** The tuning an axis starts with when it takes on `action` */
+export function defaultAxis(action: MotionChannel | 'none', kind?: ControllerKind): AxisMapping {
+	const axis: AxisMapping = { ...DEFAULT_AXIS, curve: DEFAULT_CURVE[action], action }
+	if (kind === 'spacemouse') {
+		axis.deadzone = SPACEMOUSE_DEADZONE
+		axis.curve += SPACEMOUSE_CURVE_BOOST
+	}
+	return axis
+}
+
 type Actions = Record<string, MotionChannel | 'none'>
 
 export interface Layout {
@@ -97,9 +115,27 @@ export const LAYOUTS: Record<ControllerKind, Record<string, Layout>> = {
 			actions: { leftX: 'pan', leftY: 'tilt' },
 		},
 	},
+	spacemouse: {
+		tilt: {
+			label: 'Tilt the cap to pan/tilt, lift/press zoom, twist focus',
+			actions: { roll: 'pan', pitch: 'tilt', z: 'zoom', yaw: 'focus' },
+		},
+		slide: {
+			label: 'Slide the cap to pan/tilt, lift/press zoom, twist focus',
+			actions: { x: 'pan', y: 'tilt', z: 'zoom', yaw: 'focus' },
+		},
+		twist: {
+			label: 'Twist to pan, tilt forward/back to tilt, lift/press zoom, tilt sideways focus',
+			actions: { yaw: 'pan', pitch: 'tilt', z: 'zoom', roll: 'focus' },
+		},
+	},
 }
 
-export const DEFAULT_LAYOUT: Record<ControllerKind, string> = { dji: 'right', gamepad: 'leftTriggers' }
+export const DEFAULT_LAYOUT: Record<ControllerKind, string> = {
+	dji: 'right',
+	gamepad: 'leftTriggers',
+	spacemouse: 'tilt',
+}
 
 /**
  * The layouts worth offering a controller: those it has every axis for, and of those, the ones that
@@ -132,13 +168,37 @@ export const DEFAULT_GAMEPAD_BUTTONS: ButtonMapping = {
 }
 
 /**
- * Buttons a new controller starts with. One with nowhere for the layout to put zoom, such as the
- * Magicsee R1 with its single stick, zooms on the bumpers instead of switching cameras with them.
+ * Buttons a SpaceMouse starts with, by bit: its two side buttons (Menu and Fit on a Pro) switch
+ * cameras, and a Pro's 1-4 recall presets.
  */
-export function defaultButtons(axisIds: string[], buttonIds: string[], layout: Layout): ButtonMapping {
+export const DEFAULT_SPACEMOUSE_BUTTONS: ButtonMapping = {
+	b0: { type: 'previousCamera' },
+	b1: { type: 'nextCamera' },
+	b12: { type: 'presetRecall', preset: 0 },
+	b13: { type: 'presetRecall', preset: 1 },
+	b14: { type: 'presetRecall', preset: 2 },
+	b15: { type: 'presetRecall', preset: 3 },
+}
+
+const DEFAULT_BUTTONS: Record<ControllerKind, ButtonMapping> = {
+	dji: {},
+	gamepad: DEFAULT_GAMEPAD_BUTTONS,
+	spacemouse: DEFAULT_SPACEMOUSE_BUTTONS,
+}
+
+/**
+ * Buttons a new controller starts with. A gamepad with nowhere for the layout to put zoom, such as
+ * the Magicsee R1 with its single stick, zooms on the bumpers instead of switching cameras with them.
+ */
+export function defaultButtons(
+	kind: ControllerKind,
+	axisIds: string[],
+	buttonIds: string[],
+	layout: Layout,
+): ButtonMapping {
 	const zoomAxis = Object.entries(layout.actions).find(([, action]) => action === 'zoom')?.[0]
-	const buttons: ButtonMapping = { ...DEFAULT_GAMEPAD_BUTTONS }
-	if (!zoomAxis || !axisIds.includes(zoomAxis)) {
+	const buttons: ButtonMapping = { ...DEFAULT_BUTTONS[kind] }
+	if (kind === 'gamepad' && (!zoomAxis || !axisIds.includes(zoomAxis))) {
 		buttons.lb = { type: 'hold', channel: 'zoom', direction: -1 }
 		buttons.rb = { type: 'hold', channel: 'zoom', direction: 1 }
 	}
@@ -149,15 +209,12 @@ export function defaultButtons(axisIds: string[], buttonIds: string[], layout: L
  * Build a mapping from a set of actions. Axes the layout doesn't mention do nothing. An axis that
  * keeps its job keeps its tuning; otherwise it starts from the defaults for its new one.
  */
-export function layoutMapping(axisIds: string[], actions: Actions, base?: Mapping): Mapping {
+export function layoutMapping(axisIds: string[], actions: Actions, base?: Mapping, kind?: ControllerKind): Mapping {
 	const out: Mapping = {}
 	for (const axis of axisIds) {
 		const action = actions[axis] ?? 'none'
 		const previous = base?.[axis]
-		out[axis] =
-			previous && previous.action === action
-				? { ...previous }
-				: { ...DEFAULT_AXIS, curve: DEFAULT_CURVE[action], action }
+		out[axis] = previous && previous.action === action ? { ...previous } : defaultAxis(action, kind)
 	}
 	return out
 }
@@ -173,15 +230,20 @@ export function matchingLayout(kind: ControllerKind, axisIds: string[], mapping:
  * Give `axis` the action `action`. A camera movement belongs to one axis at a time, so whichever
  * axis had it before is freed.
  */
-export function assignAction(mapping: Mapping, axis: string, action: MotionChannel | 'none'): Mapping {
+export function assignAction(
+	mapping: Mapping,
+	axis: string,
+	action: MotionChannel | 'none',
+	kind?: ControllerKind,
+): Mapping {
 	const out = structuredClone(mapping)
 	if (action !== 'none') {
 		for (const other of Object.keys(out)) {
 			if (other !== axis && out[other].action === action) out[other].action = 'none'
 		}
 	}
-	const current = out[axis] ?? { ...DEFAULT_AXIS, action: 'none' }
-	out[axis] = current.action === action ? current : { ...current, action, curve: DEFAULT_CURVE[action] }
+	const current = out[axis] ?? defaultAxis('none', kind)
+	out[axis] = current.action === action ? current : { ...current, action, curve: defaultAxis(action, kind).curve }
 	return out
 }
 
