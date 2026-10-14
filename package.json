@@ -17,6 +17,7 @@
 		"format": "prettier -w ."
 	},
 	"dependencies": {
+		"electron-updater": "^6.8.9",
 		"node-hid": "^3.4.0",
 		"serialport": "^13.0.0",
 		"ws": "^8.22.0"
@@ -75,6 +76,13 @@
 			"target": [
 				{
 					"target": "dmg",
+					"arch": [
+						"x64",
+						"arm64"
+					]
+				},
+				{
+					"target": "zip",
 					"arch": [
 						"x64",
 						"arm64"

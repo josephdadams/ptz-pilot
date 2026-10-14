@@ -1,0 +1,181 @@
+:root {
+	color-scheme: dark;
+	--bg: #15171a;
+	--panel: #1d2024;
+	--panel-2: #25292e;
+	--line: #32373d;
+	--text: #e7e9ec;
+	--muted: #8b939c;
+	--accent: #4f9dff;
+	--bad: #e5534b;
+	--radius: 8px;
+	font:
+		14px/1.4 -apple-system,
+		BlinkMacSystemFont,
+		'Segoe UI',
+		sans-serif;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+[hidden] {
+	display: none !important;
+}
+
+body {
+	margin: 0;
+	height: 100vh;
+	padding: 20px;
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	background: var(--bg);
+	color: var(--text);
+}
+
+header {
+	display: flex;
+	gap: 14px;
+	align-items: center;
+}
+
+.icon {
+	width: 56px;
+	height: 56px;
+}
+
+h1 {
+	margin: 0 0 2px;
+	font-size: 17px;
+}
+
+h2 {
+	margin: 4px 0 0;
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--muted);
+}
+
+p {
+	margin: 0;
+}
+
+.muted {
+	color: var(--muted);
+}
+
+.error {
+	color: var(--bad);
+}
+
+iframe {
+	flex: 1;
+	min-height: 0;
+	width: 100%;
+	border: 1px solid var(--line);
+	border-radius: var(--radius);
+	background: var(--panel);
+}
+
+.progress {
+	height: 6px;
+	border-radius: 3px;
+	background: var(--panel-2);
+	overflow: hidden;
+}
+
+#progress-bar {
+	height: 100%;
+	width: 0;
+	background: var(--accent);
+	transition: width 0.2s;
+}
+
+footer {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+}
+
+.spacer {
+	flex: 1;
+}
+
+.button {
+	font: inherit;
+	padding: 6px 14px;
+	border-radius: 6px;
+	border: 1px solid var(--accent);
+	background: var(--accent);
+	color: #fff;
+	cursor: pointer;
+}
+
+.button.secondary {
+	background: var(--panel-2);
+	border-color: var(--line);
+	color: var(--text);
+}
+
+.button:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+
+/* Inside the notes frame */
+
+.notes {
+	height: auto;
+	padding: 4px 16px 16px;
+	display: block;
+	background: var(--panel);
+}
+
+.notes img {
+	max-width: 100%;
+	height: auto;
+}
+
+.notes a {
+	color: var(--accent);
+}
+
+.notes h1 {
+	font-size: 16px;
+	margin: 16px 0 6px;
+}
+
+.notes h2,
+.notes h3 {
+	font-size: 14px;
+	color: var(--text);
+	margin: 16px 0 6px;
+}
+
+.notes table {
+	border-collapse: collapse;
+}
+
+.notes td,
+.notes th {
+	border: 1px solid var(--line);
+	padding: 4px 8px;
+	vertical-align: top;
+}
+
+.notes code {
+	font-family: ui-monospace, Menlo, monospace;
+	font-size: 12px;
+	background: var(--panel-2);
+	padding: 1px 4px;
+	border-radius: 4px;
+}
+
+.notes .version {
+	margin: 16px 0 0;
+	padding-bottom: 4px;
+	border-bottom: 1px solid var(--line);
+	font-size: 15px;
+}

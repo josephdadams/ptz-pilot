@@ -22,6 +22,7 @@ import { HidSource } from './controllers/hid.js'
 import { createTray, DEVELOPER_URL, type TrayHandle } from './tray.js'
 import { ApiServer } from './api.js'
 import { discover } from './onvif/discovery.js'
+import { Updater } from './updater.js'
 
 // Lets a test run use its own settings instead of the real ones
 if (process.env.PTZ_PILOT_USER_DATA) app.setPath('userData', process.env.PTZ_PILOT_USER_DATA)
@@ -37,6 +38,7 @@ let window: BrowserWindow | undefined
 /** Who the engine thinks is moving a camera when it's the window's own controls */
 const WINDOW_MOTION = 'window:'
 let tray: TrayHandle | undefined
+let updater: Updater | undefined
 let quitting = false
 
 const INPUT_MONITORING_SETTINGS = 'x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent'
@@ -326,10 +328,16 @@ app.whenReady().then(() => {
 		iconPath: path.join(app.getAppPath(), 'assets', 'icon.png'),
 	})
 
+	// Installing quits the app, which needs the window to really close rather than hide
+	const u = new Updater({ beforeInstall: () => (quitting = true) })
+	updater = u
+	u.start()
+
 	const e = engine
 	tray = createTray({
 		show: showWindow,
 		quit: () => app.quit(),
+		checkForUpdates: () => void u.check(true),
 		assign: (controllerId, cameraId) =>
 			editController(e, controllerId, (c) => {
 				c.cameraId = cameraId
@@ -346,6 +354,7 @@ app.on('window-all-closed', () => undefined)
 
 app.on('before-quit', (event) => {
 	quitting = true
+	updater?.stop()
 	if (!engine) return
 	// Give every camera its stop before the process goes away
 	event.preventDefault()

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<!-- Release notes can show images from GitHub; nothing in them may run -->
+		<meta
+			http-equiv="Content-Security-Policy"
+			content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https:; frame-src 'self'"
+		/>
+		<title>Software Update</title>
+		<link rel="stylesheet" href="update.css" />
+	</head>
+	<body>
+		<header>
+			<img src="../../assets/icon.png" alt="" class="icon" />
+			<div>
+				<h1 id="title">A new version of PTZ Pilot is available</h1>
+				<p id="subtitle" class="muted"></p>
+			</div>
+		</header>
+
+		<h2>Release notes</h2>
+		<iframe id="notes" sandbox="allow-popups allow-popups-to-escape-sandbox" title="Release notes"></iframe>
+
+		<div id="progress" class="progress" hidden><div id="progress-bar"></div></div>
+		<p id="status" class="muted" hidden></p>
+
+		<footer>
+			<button id="skip" class="button secondary">Skip This Version</button>
+			<button id="releases" class="button secondary" hidden>Download from GitHub</button>
+			<span class="spacer"></span>
+			<button id="later" class="button secondary">Remind Me Later</button>
+			<button id="primary" class="button">Install Update</button>
+		</footer>
+
+		<script type="module" src="../../dist/renderer/update.js"></script>
+	</body>
+</html>

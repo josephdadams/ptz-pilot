@@ -6,3 +6,6 @@ release/
 
 # Screenshots taken for blog posts
 blog-screenshots/
+
+# For trying the update window from source
+dev-app-update.yml

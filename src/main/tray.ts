@@ -13,6 +13,7 @@ export interface TrayHandle {
 export interface TrayActions {
 	show(): void
 	quit(): void
+	checkForUpdates?(): void
 	/** Point a controller at a camera, or at none */
 	assign?(controllerId: string, cameraId: string | undefined): void
 }
@@ -79,6 +80,7 @@ export function createTray(actions: TrayActions): TrayHandle {
 				{ label: 'Quit PTZ Pilot', click: actions.quit },
 				{ type: 'separator' },
 				{ label: 'About PTZ Pilot', click: () => app.showAboutPanel() },
+				{ label: 'Check for Updates…', click: () => actions.checkForUpdates?.() },
 				{ label: 'About the Developer', click: () => void shell.openExternal(DEVELOPER_URL) },
 			]
 

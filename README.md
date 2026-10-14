@@ -31,6 +31,7 @@
 - 🛟 **Built to fail safe** — a camera stops the moment its controller goes quiet, and every stop is sent twice.
 - 🧭 **Lives in the menu bar** — close the window and keep flying; reassign controllers right from the menu.
 - 🔌 **Remote control** — a WebSocket API and a Companion module for status, telemetry and control.
+- ⬆️ **Keeps itself current** — tells you when there's a new version, with its release notes, and installs it when you say so.
 
 ---
 
@@ -113,6 +114,10 @@ Choose what each axis does — **pan, tilt, zoom, focus** or nothing — or pick
 
 Any button can instead switch to a specific camera, recall any of presets 1–16, or change the focus mode.
 
+### Updates
+
+PTZ Pilot checks GitHub for a new version when it starts and every few hours, or whenever you choose **Check for Updates…** from the menu bar. A new version opens a window with its release notes; nothing downloads until you choose **Install Update**, and the app only restarts when you choose **Restart Now**, since a restart stops every camera for a moment. Choose **Install on Quit** to have it go in the next time PTZ Pilot quits, or **Skip This Version** to not hear about it again.
+
 ---
 
 ## 🔌 Remote control
@@ -142,7 +147,7 @@ npm install
 npm start          # build and run
 npm test           # unit and loopback tests
 npm run pack       # signed .app in release/, not notarized
-npm run dist:mac   # signed, notarized DMGs for Apple Silicon and Intel
+npm run dist:mac   # signed, notarized DMGs and update ZIPs for Apple Silicon and Intel
 npm run icons      # re-render assets/*.png from the SVGs
 ```
 
@@ -163,7 +168,9 @@ Pushing a `v*.*.*` tag builds, signs, notarizes and publishes a GitHub release. 
 | `APPLE_ID_PASSWORD`          | App-specific password for that Apple ID             |
 | `APPLE_TEAM_ID`              | Team ID                                             |
 
-Set `PTZ_PILOT_USER_DATA` to run against a separate settings folder.
+The app updates itself from these releases: each needs its `.zip` files and `latest-mac.yml`, which electron-builder uploads with the DMGs.
+
+Set `PTZ_PILOT_USER_DATA` to run against a separate settings folder. To try the update window from source, put a `dev-app-update.yml` (`provider: github`, `owner: josephdadams`, `repo: ptz-pilot`) in the project folder, lower the version in `package.json`, and start with `PTZ_PILOT_UPDATE_TEST=1 npx electron .`.
 
 </details>
 
