@@ -1,7 +1,7 @@
 {
 	"name": "ptz-pilot",
 	"productName": "PTZ Pilot",
-	"version": "1.0.0",
+	"version": "1.1.0",
 	"description": "Fly PTZ cameras with a gamepad or a DJI drone remote, over VISCA",
 	"main": "dist/src/main/main.js",
 	"private": true,
