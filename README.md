@@ -148,6 +148,7 @@ npm start          # build and run
 npm test           # unit and loopback tests
 npm run pack       # signed .app in release/, not notarized
 npm run dist:mac   # signed, notarized DMGs and update ZIPs for Apple Silicon and Intel
+npm run dist:win   # Windows NSIS installer and update metadata
 npm run icons      # re-render assets/*.png from the SVGs
 ```
 
@@ -158,7 +159,7 @@ npm run icons      # re-render assets/*.png from the SVGs
 
 Notarization runs when `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD` and `APPLE_TEAM_ID` are set.
 
-Pushing a `v*.*.*` tag builds, signs, notarizes and publishes a GitHub release. The workflow expects these repository secrets:
+Pushing a `v*.*.*` tag creates a draft release and publishes both macOS and Windows artifacts to it. The macOS build signs and notarizes, and expects these repository secrets:
 
 | Secret                       | What it is                                          |
 | ---------------------------- | --------------------------------------------------- |
@@ -168,7 +169,7 @@ Pushing a `v*.*.*` tag builds, signs, notarizes and publishes a GitHub release. 
 | `APPLE_ID_PASSWORD`          | App-specific password for that Apple ID             |
 | `APPLE_TEAM_ID`              | Team ID                                             |
 
-The app updates itself from these releases: each needs its `.zip` files and `latest-mac.yml`, which electron-builder uploads with the DMGs.
+The app updates itself from these releases: each needs macOS `.zip` files plus `latest-mac.yml`, and Windows `latest.yml` plus the NSIS installer files, all uploaded by electron-builder.
 
 Set `PTZ_PILOT_USER_DATA` to run against a separate settings folder. To try the update window from source, put a `dev-app-update.yml` (`provider: github`, `owner: josephdadams`, `repo: ptz-pilot`) in the project folder, lower the version in `package.json`, and start with `PTZ_PILOT_UPDATE_TEST=1 npx electron .`.
 

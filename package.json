@@ -14,6 +14,7 @@
 		"icons": "electron tools/render-icons.cjs",
 		"pack": "npm run build && electron-builder --mac --dir",
 		"dist:mac": "npm run build && electron-builder --mac",
+		"dist:win": "npm run build && electron-builder --win",
 		"format": "prettier -w ."
 	},
 	"dependencies": {
@@ -56,8 +57,8 @@
 			"src/renderer/**/*.{html,css}",
 			"assets/**",
 			"package.json",
-			"!**/node_modules/node-hid/prebuilds/*-{linux,win32}*/**",
-			"!**/node_modules/@serialport/bindings-cpp/prebuilds/{linux,win32,android}*/**"
+			"!**/node_modules/node-hid/prebuilds/*-linux*/**",
+			"!**/node_modules/@serialport/bindings-cpp/prebuilds/{linux,android}*/**"
 		],
 		"extraResources": [
 			{
@@ -102,6 +103,17 @@
 		},
 		"dmg": {
 			"title": "PTZ Pilot ${version}"
+		},
+		"win": {
+			"target": [
+				{
+					"target": "nsis",
+					"arch": [
+						"x64"
+					]
+				}
+			],
+			"icon": "assets/icon.png"
 		},
 		"directories": {
 			"output": "release"
